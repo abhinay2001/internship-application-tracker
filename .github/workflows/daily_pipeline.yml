@@ -3,7 +3,7 @@ name: daily_pipeline
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 17 * * *"  # 17:00 UTC (≈ 9am PT in winter)
+    - cron: "0 17 * * *" # 17:00 UTC (≈ 9am PT in winter)
 
 jobs:
   el_and_dbt:
@@ -18,29 +18,43 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install EL dependencies
+      # ------------------------
+      # Extract + Load (dlt)
+      # ------------------------
+      - name: Install EL dependencies (dlt + postgres + bigquery)
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r pipeline/extract_load/requirements.txt
+          # bulletproof: ensure dlt is installed even if requirements mismatch
+          python -m pip install "dlt[bigquery]"
+          python -c "import dlt; print('dlt version:', dlt.__version__)"
 
       - name: Run Extract/Load (Supabase -> BigQuery raw)
         env:
+          # Supabase Postgres connection string
           SUPABASE_DB_CONN: ${{ secrets.SUPABASE_DB_CONN }}
+
+          # BigQuery target dataset for RAW loads
           BQ_DATASET_RAW: raw_intern_tracker
-          BQ_PROJECT_ID: ${{ secrets.BQ_PROJECT_ID }}
-          BQ_SERVICE_ACCOUNT_JSON: ${{ secrets.BQ_SERVICE_ACCOUNT_JSON }}
+
+          # BigQuery credentials for dlt (explicit)
           DESTINATION__BIGQUERY__CREDENTIALS__PROJECT_ID: ${{ secrets.BQ_PROJECT_ID }}
-          DESTINATION__BIGQUERY__CREDENTIALS__PRIVATE_KEY: ${{ secrets.BQ_PRIVATE_KEY }}
           DESTINATION__BIGQUERY__CREDENTIALS__CLIENT_EMAIL: ${{ secrets.BQ_CLIENT_EMAIL }}
+          DESTINATION__BIGQUERY__CREDENTIALS__PRIVATE_KEY: ${{ secrets.BQ_PRIVATE_KEY }}
         run: |
           python pipeline/extract_load/main.py
 
+      # ------------------------
+      # dbt (Transforms)
+      # ------------------------
       - name: Install dbt
         run: |
-          pip install dbt-bigquery==1.8.2
+          python -m pip install dbt-bigquery==1.8.2
+          dbt --version
 
       - name: Run dbt (models + tests)
         env:
+          # Used by pipeline/dbt/profiles.yml (keyfile_json)
           BQ_PROJECT_ID: ${{ secrets.BQ_PROJECT_ID }}
           BQ_SERVICE_ACCOUNT_JSON: ${{ secrets.BQ_SERVICE_ACCOUNT_JSON }}
         run: |
