@@ -1,0 +1,12 @@
+version: 2
+
+sources:
+  - name: raw
+    database: "{{ env_var('BQ_PROJECT_ID') }}"
+    schema: raw_intern_tracker
+    tables:
+      - name: applications
+      - name: application_status_events
+      - name: application_followups
+      - name: application_contacts
+      - name: application_events
