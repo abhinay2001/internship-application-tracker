@@ -21,13 +21,13 @@ jobs:
       # ------------------------
       # Extract + Load (dlt)
       # ------------------------
-      - name: Install EL dependencies (dlt + postgres + bigquery)
+      - name: Install EL dependencies (dlt + sql_database + bigquery)
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r pipeline/extract_load/requirements.txt
-          # bulletproof: ensure dlt is installed even if requirements mismatch
-          python -m pip install "dlt[bigquery]"
-          python -c "import dlt; print('dlt version:', dlt.__version__)"
+          python -c "import dlt; print('dlt ok:', dlt.__version__)"
+          python -c "import sqlalchemy; print('sqlalchemy ok:', sqlalchemy.__version__)"
+
 
       - name: Run Extract/Load (Supabase -> BigQuery raw)
         env:
