@@ -1,6 +1,6 @@
 import os
 import dlt
-from dlt.sources.sql_database import sql_database
+from dlt.sources.sql_database.sql_database import sql_database
 from dlt.sources.helpers import incremental
 
 TABLES = [
