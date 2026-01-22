@@ -20,7 +20,7 @@ def get_engine():
 def postgres_table(table_name: str, cursor_col: str):
     engine = get_engine()
 
-    # get last processed value from dlt state
+    # Read pipeline state (watermark)
     state = dlt.current.pipeline_state()
     key = f"{table_name}_{cursor_col}_last_value"
     last_value = state.get(key, "1970-01-01T00:00:00Z")
@@ -41,7 +41,7 @@ def postgres_table(table_name: str, cursor_col: str):
                 max_seen = value
             yield dict(row)
 
-    # persist new watermark
+    # Persist watermark
     state[key] = max_seen
 
 def run():
@@ -61,3 +61,4 @@ def run():
 
 if __name__ == "__main__":
     run()
+       
