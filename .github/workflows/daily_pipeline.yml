@@ -21,13 +21,13 @@ jobs:
       # ------------------------
       # Extract + Load (dlt)
       # ------------------------
-      - name: Install EL dependencies (dlt + sql_database + bigquery)
+      - name: Run Extract/Load (Supabase -> BigQuery raw)
+        env:
+          SUPABASE_DB_CONN: ${{ secrets.SUPABASE_DB_CONN }}
+          BQ_DATASET_RAW: raw_intern_tracker
+          DESTINATION__BIGQUERY__CREDENTIALS__SERVICE_ACCOUNT_JSON: ${{ secrets.BQ_SERVICE_ACCOUNT_JSON }}
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install -r pipeline/extract_load/requirements.txt
-          python -c "import dlt; print('dlt ok:', dlt.__version__)"
-          python -c "import sqlalchemy; print('sqlalchemy ok:', sqlalchemy.__version__)"
-
+          python pipeline/extract_load/main.py
 
       - name: Run Extract/Load (Supabase -> BigQuery raw)
         env:
@@ -38,9 +38,7 @@ jobs:
           BQ_DATASET_RAW: raw_intern_tracker
 
           # BigQuery credentials for dlt (explicit)
-          DESTINATION__BIGQUERY__CREDENTIALS__PROJECT_ID: ${{ secrets.BQ_PROJECT_ID }}
-          DESTINATION__BIGQUERY__CREDENTIALS__CLIENT_EMAIL: ${{ secrets.BQ_CLIENT_EMAIL }}
-          DESTINATION__BIGQUERY__CREDENTIALS__PRIVATE_KEY: ${{ secrets.BQ_PRIVATE_KEY }}
+          DESTINATION__BIGQUERY__CREDENTIALS__SERVICE_ACCOUNT_JSON: ${{ secrets.BQ_SERVICE_ACCOUNT_JSON }}
         run: |
           python pipeline/extract_load/main.py
 
