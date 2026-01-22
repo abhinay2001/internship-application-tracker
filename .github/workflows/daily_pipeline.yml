@@ -40,9 +40,26 @@ jobs:
         env:
           SUPABASE_DB_CONN: ${{ secrets.SUPABASE_DB_CONN }}
           BQ_DATASET_RAW: raw_intern_tracker
-          DESTINATION__BIGQUERY__CREDENTIALS__SERVICE_ACCOUNT_JSON: ${{ secrets.BQ_SERVICE_ACCOUNT_JSON }}
+          BQ_PROJECT_ID: ${{ secrets.BQ_PROJECT_ID }}
+          BQ_SA_JSON: ${{ secrets.BQ_SERVICE_ACCOUNT_JSON }}
         run: |
+          # Write service account JSON to a file
+          echo "$BQ_SA_JSON" > /tmp/bq_sa.json
+
+          # Point Google SDKs to the file (THIS IS THE FIX)
+          export GOOGLE_APPLICATION_CREDENTIALS=/tmp/bq_sa.json
+
+          # Sanity check (safe)
+          python - << 'EOF'
+          import json, os
+          p = os.environ["GOOGLE_APPLICATION_CREDENTIALS"]
+          with open(p) as f:
+              data = json.load(f)
+          print("Using service account:", data.get("client_email"))
+          EOF
+
           python pipeline/extract_load/main.py
+
 
       - name: Run Extract/Load (Supabase -> BigQuery raw)
         env:
