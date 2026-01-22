@@ -1,94 +1,23 @@
-name: daily_pipeline
+- name: Run Extract/Load (Supabase -> BigQuery raw)
+  env:
+    SUPABASE_DB_CONN: ${{ secrets.SUPABASE_DB_CONN }}
+    BQ_DATASET_RAW: raw_intern_tracker
+    BQ_SA_JSON: ${{ secrets.BQ_SERVICE_ACCOUNT_JSON }}
+  run: |
+    # Write service account JSON EXACTLY (preserve newlines)
+    printf '%s' "$BQ_SA_JSON" > /tmp/bq_sa.json
 
-on:
-  workflow_dispatch:
-  schedule:
-    - cron: "0 17 * * *" # 17:00 UTC (≈ 9am PT in winter)
+    # Use Google default auth mechanism
+    export GOOGLE_APPLICATION_CREDENTIALS=/tmp/bq_sa.json
 
-jobs:
-  el_and_dbt:
-    runs-on: ubuntu-latest
+    # Sanity check (safe)
+    python - << 'EOF'
+    import json, os
+    p = os.environ["GOOGLE_APPLICATION_CREDENTIALS"]
+    with open(p) as f:
+        data = json.load(f)
+    print("Auth using:", data["client_email"])
+    print("Has private key:", bool(data.get("private_key")))
+    EOF
 
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      # ------------------------
-      # Extract + Load (dlt)
-      # ------------------------
-      - name: Verify BigQuery service account JSON (safe)
-        env:
-          SA_JSON: ${{ secrets.BQ_SERVICE_ACCOUNT_JSON }}
-        run: |
-          python - << 'EOF'
-          import json, os
-          raw = os.environ.get("SA_JSON")
-          print("JSON present:", bool(raw))
-          data = json.loads(raw)
-          print("project_id:", data.get("project_id"))
-          print("client_email:", data.get("client_email"))
-          print("private_key present:", bool(data.get("private_key")))
-          EOF
-
-      
-      - name: Run Extract/Load (Supabase -> BigQuery raw)
-        env:
-          SUPABASE_DB_CONN: ${{ secrets.SUPABASE_DB_CONN }}
-          BQ_DATASET_RAW: raw_intern_tracker
-          BQ_PROJECT_ID: ${{ secrets.BQ_PROJECT_ID }}
-          BQ_SA_JSON: ${{ secrets.BQ_SERVICE_ACCOUNT_JSON }}
-        run: |
-          # Write service account JSON to a file
-          echo "$BQ_SA_JSON" > /tmp/bq_sa.json
-
-          # Point Google SDKs to the file (THIS IS THE FIX)
-          export GOOGLE_APPLICATION_CREDENTIALS=/tmp/bq_sa.json
-
-          # Sanity check (safe)
-          python - << 'EOF'
-          import json, os
-          p = os.environ["GOOGLE_APPLICATION_CREDENTIALS"]
-          with open(p) as f:
-              data = json.load(f)
-          print("Using service account:", data.get("client_email"))
-          EOF
-
-          python pipeline/extract_load/main.py
-
-
-      - name: Run Extract/Load (Supabase -> BigQuery raw)
-        env:
-          # Supabase Postgres connection string
-          SUPABASE_DB_CONN: ${{ secrets.SUPABASE_DB_CONN }}
-
-          # BigQuery target dataset for RAW loads
-          BQ_DATASET_RAW: raw_intern_tracker
-
-          # BigQuery credentials for dlt (explicit)
-          DESTINATION__BIGQUERY__CREDENTIALS__SERVICE_ACCOUNT_JSON: ${{ secrets.BQ_SERVICE_ACCOUNT_JSON }}
-        run: |
-          python pipeline/extract_load/main.py
-
-      # ------------------------
-      # dbt (Transforms)
-      # ------------------------
-      - name: Install dbt
-        run: |
-          python -m pip install dbt-bigquery==1.8.2
-          dbt --version
-
-      - name: Run dbt (models + tests)
-        env:
-          # Used by pipeline/dbt/profiles.yml (keyfile_json)
-          BQ_PROJECT_ID: ${{ secrets.BQ_PROJECT_ID }}
-          BQ_SERVICE_ACCOUNT_JSON: ${{ secrets.BQ_SERVICE_ACCOUNT_JSON }}
-        run: |
-          cd pipeline/dbt
-          dbt deps || true
-          dbt run --profiles-dir .
-          dbt test --profiles-dir .
+    python pipeline/extract_load/main.py
