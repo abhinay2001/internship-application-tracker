@@ -11,3 +11,5 @@ out
 
 # misc
 .DS_Store
+
+.venv/

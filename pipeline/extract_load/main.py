@@ -1,7 +1,6 @@
 import os
 import dlt
 from sqlalchemy import create_engine, text
-from dlt.sources.helpers import incremental
 
 TABLES = [
     ("applications", "updated_at"),
@@ -20,19 +19,30 @@ def get_engine():
 @dlt.resource
 def postgres_table(table_name: str, cursor_col: str):
     engine = get_engine()
-    inc = incremental(cursor_col, initial_value="1970-01-01T00:00:00Z")
+
+    # get last processed value from dlt state
+    state = dlt.current.pipeline_state()
+    key = f"{table_name}_{cursor_col}_last_value"
+    last_value = state.get(key, "1970-01-01T00:00:00Z")
+
+    query = text(f"""
+        SELECT *
+        FROM {table_name}
+        WHERE {cursor_col} > :last_value
+        ORDER BY {cursor_col}
+    """)
+
+    max_seen = last_value
 
     with engine.connect() as conn:
-        query = text(f"""
-            SELECT *
-            FROM {table_name}
-            WHERE {cursor_col} > :last_value
-            ORDER BY {cursor_col}
-        """)
-        result = conn.execute(query, {"last_value": inc.last_value})
-        for row in result.mappings():
-            inc.advance(row[cursor_col])
+        for row in conn.execute(query, {"last_value": last_value}).mappings():
+            value = row[cursor_col]
+            if value and value > max_seen:
+                max_seen = value
             yield dict(row)
+
+    # persist new watermark
+    state[key] = max_seen
 
 def run():
     pipeline = dlt.pipeline(
