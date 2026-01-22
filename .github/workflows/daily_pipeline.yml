@@ -21,6 +21,21 @@ jobs:
       # ------------------------
       # Extract + Load (dlt)
       # ------------------------
+      - name: Verify BigQuery service account JSON (safe)
+        env:
+          SA_JSON: ${{ secrets.BQ_SERVICE_ACCOUNT_JSON }}
+        run: |
+          python - << 'EOF'
+          import json, os
+          raw = os.environ.get("SA_JSON")
+          print("JSON present:", bool(raw))
+          data = json.loads(raw)
+          print("project_id:", data.get("project_id"))
+          print("client_email:", data.get("client_email"))
+          print("private_key present:", bool(data.get("private_key")))
+          EOF
+
+      
       - name: Run Extract/Load (Supabase -> BigQuery raw)
         env:
           SUPABASE_DB_CONN: ${{ secrets.SUPABASE_DB_CONN }}
