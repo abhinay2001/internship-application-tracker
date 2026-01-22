@@ -1,23 +1,64 @@
-- name: Run Extract/Load (Supabase -> BigQuery raw)
-  env:
-    SUPABASE_DB_CONN: ${{ secrets.SUPABASE_DB_CONN }}
-    BQ_DATASET_RAW: raw_intern_tracker
-    BQ_SA_JSON: ${{ secrets.BQ_SERVICE_ACCOUNT_JSON }}
-  run: |
-    # Write service account JSON EXACTLY (preserve newlines)
-    printf '%s' "$BQ_SA_JSON" > /tmp/bq_sa.json
+name: daily_pipeline
 
-    # Use Google default auth mechanism
-    export GOOGLE_APPLICATION_CREDENTIALS=/tmp/bq_sa.json
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 17 * * *" # 17:00 UTC (~9am PT winter)
 
-    # Sanity check (safe)
-    python - << 'EOF'
-    import json, os
-    p = os.environ["GOOGLE_APPLICATION_CREDENTIALS"]
-    with open(p) as f:
-        data = json.load(f)
-    print("Auth using:", data["client_email"])
-    print("Has private key:", bool(data.get("private_key")))
-    EOF
+jobs:
+  el_and_dbt:
+    runs-on: ubuntu-latest
 
-    python pipeline/extract_load/main.py
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install EL dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r pipeline/extract_load/requirements.txt
+          python -c "import dlt; print('dlt version:', dlt.__version__)"
+          python -c "import sqlalchemy; print('sqlalchemy version:', sqlalchemy.__version__)"
+
+      - name: Run Extract/Load (Supabase -> BigQuery raw)
+        env:
+          SUPABASE_DB_CONN: ${{ secrets.SUPABASE_DB_CONN }}
+          BQ_DATASET_RAW: raw_intern_tracker
+          BQ_SA_JSON: ${{ secrets.BQ_SERVICE_ACCOUNT_JSON }}
+        run: |
+          # Write service account JSON EXACTLY (preserve newlines)
+          printf '%s' "$BQ_SA_JSON" > /tmp/bq_sa.json
+
+          # Use Google default auth
+          export GOOGLE_APPLICATION_CREDENTIALS=/tmp/bq_sa.json
+
+          # Safe sanity check
+          python - << 'EOF'
+          import json, os
+          with open(os.environ["GOOGLE_APPLICATION_CREDENTIALS"]) as f:
+              data = json.load(f)
+          print("Auth using:", data["client_email"])
+          print("Has private key:", bool(data.get("private_key")))
+          EOF
+
+          python pipeline/extract_load/main.py
+
+      - name: Install dbt
+        run: |
+          python -m pip install dbt-bigquery==1.8.2
+          dbt --version
+
+      - name: Run dbt (models + tests)
+        env:
+          BQ_PROJECT_ID: ${{ secrets.BQ_PROJECT_ID }}
+          BQ_SERVICE_ACCOUNT_JSON: ${{ secrets.BQ_SERVICE_ACCOUNT_JSON }}
+        run: |
+          cd pipeline/dbt
+          dbt deps || true
+          dbt run --profiles-dir .
+          dbt test --profiles-dir .
