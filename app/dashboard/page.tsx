@@ -99,7 +99,7 @@ export default function DashboardPage() {
       .order("date_applied", { ascending: false });
 
     if (error) setMsg(error.message);
-    else setApps((data as AppRow[]) ?? []);
+    else setApps(((data as unknown) as AppRow[]) ?? []);
   };
 
   useEffect(() => {

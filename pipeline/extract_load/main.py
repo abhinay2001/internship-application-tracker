@@ -1,9 +1,8 @@
 import os
 import dlt
 from dlt.sources.sql_database import sql_database
-from dlt.sources.helpers.incremental import incremental
+from dlt.sources.helpers import incremental
 
-# Tables to extract and their incremental cursor columns
 TABLES = [
     ("applications", "updated_at"),
     ("application_status_events", "changed_at"),
@@ -13,10 +12,6 @@ TABLES = [
 ]
 
 def get_supabase_conn_str() -> str:
-    """
-    Supabase Postgres connection string.
-    Recommended: Transaction pooler connection string.
-    """
     conn = os.environ.get("SUPABASE_DB_CONN")
     if not conn:
         raise RuntimeError("SUPABASE_DB_CONN environment variable is required.")
@@ -42,11 +37,10 @@ def run():
                 initial_value="1970-01-01T00:00:00Z",
             ),
         )
-        res = res.with_name(table_name)
-        resources.append(res)
+        resources.append(res.with_name(table_name))
 
-    load_info = pipeline.run(resources)
-    print(load_info)
+    info = pipeline.run(resources)
+    print(info)
 
 if __name__ == "__main__":
     run()
